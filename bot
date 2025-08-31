@@ -1,0 +1,72 @@
+<?php
+
+$botToken = "7723433055:AAHsIE-8P1jhKg0iZiryY6hOe3sW84UFHDQ";
+$website = "https://api.telegram.org/bot" . $botToken;
+
+/**
+ * تابع سفارشی برای لاگ‌گیری در یک فایل متنی
+ * چون می‌دانیم file_put_contents() کار می‌کند، از آن استفاده می‌کنیم.
+ * @param string $message متنی که باید در لاگ ثبت شود
+ */
+function custom_log($message) {
+    // اضافه کردن تاریخ و زمان به ابتدای هر لاگ
+    $timestamp = date("Y-m-d H:i:s");
+    // استفاده از FILE_APPEND تا لاگ‌های جدید به انتهای فایل اضافه شوند و فایل بازنویسی نشود
+    file_put_contents("bot_activity_log.txt", $timestamp . " - " . $message . "\n", FILE_APPEND);
+}
+
+// دریافت اطلاعات خام ارسال شده از تلگرام
+$content = file_get_contents("php://input");
+
+// اولین لاگ: آیا اصلا درخواستی از تلگرام به دست ما می‌رسد؟
+custom_log("Received update from Telegram: " . $content);
+
+// تبدیل داده‌های JSON به آرایه PHP
+$update = json_decode($content, true);
+
+// بررسی می‌کنیم که آیا جیسون معتبر است یا نه
+if (json_last_error() !== JSON_ERROR_NONE) {
+    custom_log("Error decoding JSON: " . json_last_error_msg());
+    exit(); // خروج از اسکریپت در صورت خطای JSON
+}
+
+if (isset($update["message"])) {
+    $chatId = $update["message"]["chat"]["id"];
+    $message = $update["message"]["text"];
+    
+    custom_log("Processing message from chat_id: " . $chatId . " | Text: " . $message);
+
+    // بررسی می‌کند که آیا پیام ارسال شده یک لینک پروکسی تلگرام است
+    if (strpos($message, 'https://t.me/proxy?') === 0) {
+        
+        $header = "پروکسی ضد فیلتر و پر سرعت";
+        $footer = "لطفا پروکسی ها را برای دوستان خود هم ارسال کنید تا استفاده کنند\n@NiceMTProto ☜";
+        $replyMessage = $header . "\n" . $message . "\n\n" . $footer;
+
+        sendMessage($chatId, $replyMessage);
+        custom_log("Sent proxy reply to chat_id: " . $chatId);
+
+    } else {
+        $replyMessage = "لطفاً فقط لینک پروکسی تلگرام را برای من ارسال کنید.";
+        sendMessage($chatId, $replyMessage);
+        custom_log("Sent help message to chat_id: " . $chatId);
+    }
+} else {
+    custom_log("Received an update without a message object.");
+}
+
+/**
+ * تابعی برای ارسال پیام به تلگرام
+ * @param int $chatId شناسه چت
+ * @param string $message متنی که باید ارسال شود
+ */
+function sendMessage($chatId, $message) {
+    $url = $GLOBALS['website'] . "/sendMessage?chat_id=" . $chatId . "&text=" . urlencode($message);
+    $result = file_get_contents($url);
+    
+    if ($result === FALSE) {
+        custom_log("FATAL: Failed to send message via API call to URL: " . $url);
+    }
+}
+
+?>
